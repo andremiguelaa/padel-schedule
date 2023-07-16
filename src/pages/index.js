@@ -164,12 +164,12 @@ export default function Home() {
                       <ul>
                         {uniqBy(
                           item.slots,
-                          (item) => item.start + item.court.roof
+                          (item) => item.start + item.court.roof + item.court.surface
                         )
                           .sort((a, b) => a.start.localeCompare(b.start))
                           .map((slot) => (
                             <li key={slot.id}>
-                              {slot.start} ({roofTypes[slot.court.roof]})
+                              {slot.start} ({roofTypes[slot.court.roof]} / {slot.court.surface})
                             </li>
                           ))}
                       </ul>
