@@ -1,12 +1,14 @@
 import { useState } from "react";
 import axios from "axios";
 import { uniqBy } from "lodash";
+import { format } from "date-fns";
+
 import "bulma/css/bulma.css";
 
 const roofTypes = {
-  0: "Descoberto",
-  1: "Indoor",
-  2: "Coberto",
+  outdoor: "Descoberto",
+  indoor: "Indoor",
+  roofed: "Coberto",
 };
 
 const today = new Date();
@@ -17,7 +19,9 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [data, setData] = useState();
   const [date, setDate] = useState();
-  const [time, setTime] = useState();
+
+  const selectedDate = format(new Date(date || 0), "yyyy-MM-dd");
+
   return (
     <main>
       <form
@@ -36,7 +40,6 @@ export default function Home() {
             })
             .then((response) => {
               setDate(formData.get("date"));
-              setTime(formData.get("time"));
               setData(response.data.filter((item) => item.slots.length));
               setLoading(false);
             });
@@ -151,25 +154,37 @@ export default function Home() {
               <hr />
               <div className="pl-2 pr-2">
                 {data.map((item) => (
-                  <div key={item.venue.club_id} className="panel">
+                  <div key={item.venue.tenant_id} className="panel">
                     <p className="panel-heading mb-0">
                       <a
-                        href={`https://www.aircourts.com/index.php/site/view_club/${item.venue.club_id}/${date}/${time}`}
+                        href={`https://playtomic.io/${item.venue.tenant_uid}/${item.venue.tenant_id}?q=PADEL~${date}~~~`}
                         target="_blank"
                       >
-                        {item.venue.club_name} ({item.venue.zone})
+                        {item.venue.tenant_name}
                       </a>
                     </p>
                     <div className="panel-block pb-5">
                       <ul>
                         {uniqBy(
                           item.slots,
-                          (item) => item.start + item.court.roof + item.court.surface
+                          (item) => item.start_time + item.name
                         )
-                          .sort((a, b) => a.start.localeCompare(b.start))
+                          .sort((a, b) =>
+                            a.start_time.localeCompare(b.start_time)
+                          )
                           .map((slot) => (
-                            <li key={slot.id}>
-                              {slot.start} ({roofTypes[slot.court.roof]} / {slot.court.surface})
+                            <li key={slot.start_time}>
+                              {format(
+                                new Date(
+                                  `${selectedDate}T${slot.start_time}.000Z`
+                                ),
+                                "HH:mm"
+                              )}{" "}
+                              ({roofTypes[slot.properties.resource_type]}
+                              {slot.properties.resource_size == "single"
+                                ? " / Individual"
+                                : ""}
+                              )
                             </li>
                           ))}
                       </ul>

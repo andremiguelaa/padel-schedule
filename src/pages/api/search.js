@@ -1,71 +1,63 @@
 import axios from "axios";
+import { format, add } from "date-fns";
 import _ from "lodash";
 
 import venuesSlugs from "./venues.json";
 
 const getFreeSlots = async ({ date, time, duration }) =>
   new Promise((resolve) => {
+    const minDate = new Date(`${date}T${time}:00`);
+    const maxDate = add(minDate, { hours: 3 });
     axios
-      .get(`https://www.aircourts.com/index.php/v2/api/search`, {
+      .get(`https://playtomic.io/api/v1/tenants`, {
         params: {
-          city: 13,
-          sport: 4,
-          date,
-          start_time: time,
-          time_override: 1,
-          page_size: 100000,
-          page: 1,
-          favorites: 0,
+          user_id: "me",
+          playtomic_status: "ACTIVE",
+          coordinate: "38.722252,-9.139337",
+          sport_id: "PADEL",
+          radius: 50000,
         },
       })
       .then((response) => {
-        const slugsById = {};
-        const clubIds = Object.values(
-          _.keyBy(response.data.results, "slug")
-        ).reduce((acc, venue) => {
-          slugsById[venue.club_id] = venue;
-          if (venuesSlugs.includes(venue.slug)) {
-            const validSlots = venue.slots.filter(
-              (slot) => slot.status === "available"
-            );
-            const courts = _.groupBy(validSlots, "court_id");
-            Object.values(courts).forEach((value) => {
-              if (value.length > 0) {
-                acc.push(venue.club_id);
-              }
-            });
-          }
-          return acc;
-        }, []);
+        const validVenues = response.data.filter((item) =>
+          venuesSlugs.includes(item.tenant_uid)
+        );
+        const clubIds = validVenues.map((item) => item.tenant_id);
+        const venuesById = _.keyBy(validVenues, "tenant_id");
         let clubPromises = [];
         clubIds.forEach((id) => {
           clubPromises.push(
             new Promise((clubResolve) => {
               axios
-                .get(
-                  `https://www.aircourts.com/index.php/api/search_with_club/${id}`,
-                  {
-                    params: {
-                      sport: 4,
-                      date,
-                      start_time: time,
-                    },
-                  }
-                )
+                .get(`https://playtomic.io/api/v1/availability`, {
+                  params: {
+                    user_id: "me",
+                    tenant_id: id,
+                    sport_id: "PADEL",
+                    local_start_min: format(minDate, "yyyy-MM-dd'T'HH:mm:00"),
+                    local_start_max: format(maxDate, "yyyy-MM-dd'T'HH:mm:00"),
+                  },
+                })
                 .then((response) => {
                   const slotsForCourt = [];
-                  response.data.results.forEach((court) => {
+                  response.data.forEach((court) => {
+                    const courtInfo = venuesById[id].resources.find(
+                      (item) => item.resource_id === court.resource_id
+                    );
+
                     court.slots.forEach((slot) => {
-                      const durationInteger = parseInt(duration);
-                      if (slot.durations?.includes(durationInteger)) {
-                        slotsForCourt.push({ ...slot, court });
+                      if (slot.duration === parseInt(duration)) {
+                        slotsForCourt.push({ ...courtInfo, ...slot });
                       }
                     });
                   });
                   clubResolve({
-                    venue: slugsById[id],
+                    venue: venuesById[id],
                     slots: slotsForCourt,
                   });
+                })
+                .catch(() => {
+                  clubResolve();
                 });
             })
           );
